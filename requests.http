@@ -1,0 +1,113 @@
+@baseUrl = http://localhost:3000
+# Ganti ID berikut dengan ID dari response create masing-masing.
+@userId = 1
+@postId = 1
+@commentId = 1
+
+### Cek server dan koneksi Neon
+GET {{baseUrl}}/health
+
+### Buat user (gunakan email lain bila sudah terdaftar)
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "budi@example.com",
+  "name": "Budi",
+  "password": "rahasia123"
+}
+
+### Daftar user (tanpa password)
+GET {{baseUrl}}/api/users
+
+### Detail user
+GET {{baseUrl}}/api/users/{{userId}}
+
+### Ubah nama user
+PATCH {{baseUrl}}/api/users/{{userId}}
+Content-Type: application/json
+
+{ "name": "Budi Santoso" }
+
+### Buat post pertama (draft)
+POST {{baseUrl}}/api/posts
+Content-Type: application/json
+
+{
+  "title": "Belajar Express dan Prisma",
+  "content": "Materi Modul 4",
+  "authorId": {{userId}}
+}
+
+### Buat post kedua untuk mencoba pagination
+POST {{baseUrl}}/api/posts
+Content-Type: application/json
+
+{
+  "title": "Belajar relasi Comment",
+  "authorId": {{userId}}
+}
+
+### Publish post yang dipilih
+PATCH {{baseUrl}}/api/posts/{{postId}}
+Content-Type: application/json
+
+{ "published": true }
+
+### Daftar post dengan pencarian/filter/pagination (materi utama)
+GET {{baseUrl}}/api/posts?search=express&published=true&page=1&limit=5
+
+### Detail post
+GET {{baseUrl}}/api/posts/{{postId}}
+
+### Statistik dasar materi utama (bukan challenge statistik harian)
+GET {{baseUrl}}/api/posts/stats
+
+### Challenge 1: buat komentar
+POST {{baseUrl}}/api/comments
+Content-Type: application/json
+
+{
+  "content": "Penjelasannya membantu!",
+  "userId": {{userId}},
+  "postId": {{postId}}
+}
+
+### Challenge 1: semua komentar
+GET {{baseUrl}}/api/comments
+
+### Challenge 1: detail komentar
+GET {{baseUrl}}/api/comments/{{commentId}}
+
+### Challenge 1: ubah komentar
+PATCH {{baseUrl}}/api/comments/{{commentId}}
+Content-Type: application/json
+
+{ "content": "Komentar yang sudah diperbarui" }
+
+### Challenge 2: semua post user, halaman pertama
+GET {{baseUrl}}/api/users/{{userId}}/posts?page=1&limit=1
+
+### Challenge 2: halaman kedua
+GET {{baseUrl}}/api/users/{{userId}}/posts?page=2&limit=1
+
+### Challenge 2: hanya published
+GET {{baseUrl}}/api/users/{{userId}}/posts?published=true&page=1&limit=5
+
+### Challenge 2: hanya draft
+GET {{baseUrl}}/api/users/{{userId}}/posts?published=false&page=1&limit=5
+
+### Query tidak valid -> 400
+GET {{baseUrl}}/api/users/{{userId}}/posts?published=yes
+
+### ID tidak valid -> 400
+GET {{baseUrl}}/api/comments/abc
+
+### Hapus komentar (GET detail setelahnya -> 404)
+DELETE {{baseUrl}}/api/comments/{{commentId}}
+
+### Hapus post (komentar pada post ikut terhapus)
+DELETE {{baseUrl}}/api/posts/{{postId}}
+
+### Hapus user (post dan komentar milik user ikut terhapus)
+DELETE {{baseUrl}}/api/users/{{userId}}
