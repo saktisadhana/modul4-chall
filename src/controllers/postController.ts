@@ -5,6 +5,22 @@ import { nullableText, parseBody, parseId, parsePagination, parsePublished, requ
 import { sendSuccess } from "../utils/response";
 import { authorSelect } from "../utils/select";
 
+const parsePostBulkItem = (item: unknown, index: number) => {
+  const body = parseBody(item);
+  const title = requiredText(body.title, `Title item ke-${index + 1}`);
+  const authorId = parseId(body.authorId);
+  const content = body.content === undefined ? undefined : nullableText(body.content, `Content item ke-${index + 1}`);
+  if (body.published !== undefined && typeof body.published !== "boolean") {
+    throw new HttpError(400, `Published item ke-${index + 1} harus berupa boolean`);
+  }
+  return {
+    title,
+    authorId,
+    ...(content !== undefined && { content }),
+    ...(body.published !== undefined && { published: body.published }),
+  };
+};
+
 export const createPost = async (req: Request, res: Response) => {
   const body = parseBody(req.body);
   const title = requiredText(body.title, "Title");
@@ -17,6 +33,30 @@ export const createPost = async (req: Request, res: Response) => {
     include: { author: authorSelect },
   });
   sendSuccess(res, 201, "Post berhasil dibuat", post);
+};
+
+export const createPostsBulk = async (req: Request, res: Response) => {
+  if (!Array.isArray(req.body)) {
+    throw new HttpError(400, "Body harus berupa array post");
+  }
+  if (req.body.length === 0) {
+    throw new HttpError(400, "Array post tidak boleh kosong");
+  }
+
+  const posts = req.body.map(parsePostBulkItem);
+  const authorIds = [...new Set(posts.map((post) => post.authorId))];
+  const authors = await prisma.user.findMany({
+    where: { id: { in: authorIds } },
+    select: { id: true },
+  });
+  const foundAuthorIds = new Set(authors.map((author) => author.id));
+  const missingAuthorId = posts.find((post) => !foundAuthorIds.has(post.authorId));
+  if (missingAuthorId) {
+    throw new HttpError(404, `User dengan ID ${missingAuthorId.authorId} tidak ditemukan`);
+  }
+
+  const result = await prisma.post.createMany({ data: posts });
+  sendSuccess(res, 201, "Post berhasil dibuat secara bulk", { count: result.count, posts });
 };
 
 export const getAllPosts = async (req: Request, res: Response) => {
@@ -53,6 +93,23 @@ export const getPostStats = async (_req: Request, res: Response) => {
     }),
   ]);
   sendSuccess(res, 200, "Berhasil mengambil statistik posts", { overall, perAuthor });
+};
+
+export const getDailyPostStats = async (_req: Request, res: Response) => {
+  const stats = await prisma.$queryRaw<Array<{
+    day: string;
+    totalPosts: number;
+    totalViews: number;
+  }>>`
+    SELECT
+      date_trunc('day', "createdAt")::date AS "day",
+      COUNT(*)::int AS "totalPosts",
+      COALESCE(SUM("views"), 0)::int AS "totalViews"
+    FROM "Post"
+    GROUP BY date_trunc('day', "createdAt")
+    ORDER BY "day" ASC
+  `;
+  sendSuccess(res, 200, "Berhasil mengambil statistik harian posts", stats);
 };
 
 export const getPostById = async (req: Request, res: Response) => {
