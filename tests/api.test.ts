@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 const db = vi.hoisted(() => {
   const model = () => ({
-    create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(),
+    create: vi.fn(), createMany: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(),
     update: vi.fn(), delete: vi.fn(), count: vi.fn(),
     aggregate: vi.fn(), groupBy: vi.fn(),
   });
@@ -85,9 +85,31 @@ describe("Dasar API dan error handling", () => {
     expect(res.body.status).toBe(false);
   });
 
-  it("tidak menyediakan challenge nomor 3 dan 4", async () => {
-    expect((await request(app).get("/api/posts/stats/daily")).status).toBe(404);
-    expect((await request(app).post("/api/posts/bulk").send([])).status).toBe(404);
+  it("menyediakan statistik harian post", async () => {
+    db.$queryRaw.mockResolvedValue([
+      { day: "2026-10-28", totalPosts: 2, totalViews: 45 },
+      { day: "2026-10-29", totalPosts: 1, totalViews: 12 },
+    ]);
+    const res = await request(app).get("/api/posts/stats/daily");
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([
+      { day: "2026-10-28", totalPosts: 2, totalViews: 45 },
+      { day: "2026-10-29", totalPosts: 1, totalViews: 12 },
+    ]);
+    expect(db.$queryRaw).toHaveBeenCalledOnce();
+  });
+
+  it("membuat post secara bulk", async () => {
+    db.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+    db.post.createMany.mockResolvedValue({ count: 2 });
+    const payload = [
+      { title: "Judul 1", authorId: 1, content: "Isi 1", published: true },
+      { title: "Judul 2", authorId: 2, content: "Isi 2" },
+    ];
+    const res = await request(app).post("/api/posts/bulk").send(payload);
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ count: 2, posts: payload });
+    expect(db.post.createMany).toHaveBeenCalledWith({ data: payload });
   });
 });
 
