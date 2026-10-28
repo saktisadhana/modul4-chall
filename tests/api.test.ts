@@ -377,3 +377,63 @@ describe("Challenge 20 nomor 2: post milik user", () => {
     expect((await request(app).get("/api/users/abc/posts")).status).toBe(400);
   });
 });
+
+describe("Challenge 20 nomor 6: validasi input user", () => {
+  it("mengembalikan semua error field sekaligus", async () => {
+    const res = await request(app).post("/api/users").send({ email: "budi", password: "123" });
+    expect(res.status).toBe(400);
+    expect(res.body.status).toBe(false);
+    expect(res.body.errors).toEqual({
+      email: "Format email tidak valid, contoh: nama@domain.com",
+      password: "Password minimal 8 karakter",
+    });
+    expect(db.user.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["budi@", "Format email tidak valid, contoh: nama@domain.com"],
+    ["budi @example.com", "Format email tidak valid, contoh: nama@domain.com"],
+    ["", "Email wajib diisi"],
+  ])("menolak email %j", async (email, message) => {
+    const res = await request(app).post("/api/users").send({ email, password: "rahasia123" });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.email).toBe(message);
+  });
+
+  it.each([
+    ["rahasia", "Password minimal 8 karakter"],
+    ["rahasiaaa", "Password harus mengandung huruf dan angka"],
+    ["12345678", "Password harus mengandung huruf dan angka"],
+    ["a1".repeat(40), "Password maksimal 72 byte"],
+  ])("menolak password %j", async (password, message) => {
+    const res = await request(app).post("/api/users").send({ email: "a@b.com", password });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.password).toBe(message);
+  });
+
+  it("menyimpan email dalam lowercase dan tanpa spasi", async () => {
+    db.user.findUnique.mockResolvedValue(null);
+    db.user.create.mockResolvedValue(user);
+    const res = await request(app).post("/api/users").send({ email: "  Budi@Example.COM ", password: "rahasia123" });
+    expect(res.status).toBe(201);
+    expect(db.user.create.mock.calls[0]![0].data.email).toBe("budi@example.com");
+  });
+
+  it("memvalidasi email saat PATCH dan menolak email milik user lain", async () => {
+    const invalid = await request(app).patch("/api/users/1").send({ email: "salah" });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.errors.email).toBeDefined();
+
+    db.user.findUnique.mockResolvedValue({ id: 2 });
+    const taken = await request(app).patch("/api/users/1").send({ email: "andi@example.com" });
+    expect(taken.status).toBe(409);
+    expect(taken.body.message).toBe("Email sudah dipakai user lain");
+    expect(db.user.update).not.toHaveBeenCalled();
+  });
+
+  it("menolak name yang terlalu panjang", async () => {
+    const res = await request(app).post("/api/users").send({ email: "a@b.com", password: "rahasia123", name: "x".repeat(101) });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.name).toBe("Name maksimal 100 karakter");
+  });
+});

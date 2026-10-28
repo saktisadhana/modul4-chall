@@ -111,3 +111,55 @@ DELETE {{baseUrl}}/api/posts/{{postId}}
 
 ### Hapus user (post dan komentar milik user ikut terhapus)
 DELETE {{baseUrl}}/api/users/{{userId}}
+
+### ===== Challenge 20 nomor 5: eksperimen Neon branch =====
+### Jalankan request ini dua kali: sekali saat .env mengarah ke branch eksperimen,
+### sekali saat .env mengarah ke main. Restart server setiap kali .env diganti.
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "branch-test@example.com",
+  "name": "Data Branch",
+  "password": "branch12345"
+}
+
+### Bandingkan isi users di branch vs main
+GET {{baseUrl}}/api/users
+
+### ===== Challenge 20 nomor 6: validasi input =====
+### Email dan password salah sekaligus -> 400, kedua error muncul di "errors"
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "budi",
+  "password": "123"
+}
+
+### Password tanpa angka -> 400
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "andi@example.com",
+  "password": "rahasiaaa"
+}
+
+### Email huruf besar + spasi -> 201, disimpan "citra@example.com"
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "  Citra@Example.COM ",
+  "name": "Citra",
+  "password": "rahasia123"
+}
+
+### PATCH dengan email tidak valid -> 400
+PATCH {{baseUrl}}/api/users/{{userId}}
+Content-Type: application/json
+
+{
+  "email": "bukan-email"
+}

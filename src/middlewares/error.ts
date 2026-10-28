@@ -1,8 +1,8 @@
 import type { ErrorRequestHandler, RequestHandler, Response } from "express";
 import { HttpError } from "../utils/http-error";
 
-const fail = (res: Response, status: number, message: string): void => {
-  res.status(status).json({ status: false, message });
+const fail = (res: Response, status: number, message: string, errors?: Record<string, string>): void => {
+  res.status(status).json({ status: false, message, ...(errors && { errors }) });
 };
 
 export const notFound: RequestHandler = (req, res) => {
@@ -15,7 +15,7 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, next)
     return;
   }
   if (err instanceof HttpError) {
-    fail(res, err.status, err.message);
+    fail(res, err.status, err.message, err.errors);
     return;
   }
   if (typeof err === "object" && err !== null) {

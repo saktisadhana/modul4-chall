@@ -1,7 +1,6 @@
 # Modul 4 — Express, Prisma, dan Neon
 
-Implementasi materi Modul 4 serta **Challenge bagian 20 nomor 1 dan 2 saja**.
-Nomor 3–6 (statistik harian, bulk create, eksperimen branch Neon, dan bonus) tidak dikerjakan.
+Implementasi materi Modul 4 serta **Challenge bagian 20 nomor 1 sampai 6**.
 
 Sumber: [Modul 4 lab-kcks](https://github.com/lab-kcks/Modul-Pemrograman-Website-2026/tree/main/modul-4).
 
@@ -140,6 +139,62 @@ Contoh bentuk response (isi `data` disingkat):
 - Halaman melewati data yang tersedia: `200`, `data: []`; total tetap benar.
 - Query/ID tidak valid, parameter berulang, atau offset terlalu besar: `400`.
 - `published=false` benar-benar menyaring draft, bukan dianggap tanpa filter.
+
+## Challenge 20 nomor 3 dan 4
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/api/posts/stats/daily` | Jumlah post dan total views per hari, raw query `date_trunc` |
+| POST | `/api/posts/bulk` | Menerima array post dan menyimpannya dengan `createMany` |
+
+## Challenge 20 nomor 5: Eksperimen Neon branch
+
+Branch Neon adalah salinan database (copy-on-write) yang terpisah dari branch utama `production`. Perubahan schema maupun data di branch tidak menyentuh `production`.
+
+Langkah yang dilakukan:
+
+1. Di branch `production`: jalankan `npm run db:deploy`, lalu buat user lewat API sebagai data pembanding.
+2. Neon Console → **Create child branch**. Parent: `production`, nama: `eksperimen`, opsi **Branch data and schema**.
+3. Neon Console → **Connect** → pilih branch `eksperimen`. Salin connection string pooled ke `DATABASE_URL` dan unpooled ke `DATABASE_URL_UNPOOLED` di `.env`. Host branch berbeda dengan host `production` (endpoint `ep-...` lain).
+4. `npx prisma migrate status` di branch: kedua migrasi sudah ikut tersalin dari `production`.
+5. Eksperimen migrasi: tambahkan sementara kolom `bio String?` pada `User`, lalu `npx prisma migrate dev --name eksperimen_branch`.
+6. Restart server, buat user baru lewat API (lihat `requests.http`).
+7. Kembalikan `.env` ke `production`, restart server, dan bandingkan.
+
+Hasil observasi:
+
+| | Branch `eksperimen` | Branch `production` |
+| --- | --- | --- |
+| Kolom `bio` di tabel `User` | Ada | Tidak ada |
+| User `branch-test@example.com` | Ada | Tidak ada |
+| Data user lama dari `production` | Ikut tersalin saat branch dibuat | Tetap utuh |
+
+Migrasi eksperimen **tidak di-commit**: folder migrasinya dihapus dan `schema.prisma` dikembalikan, supaya riwayat migrasi tim tidak berubah. Opsi **Branch schema only** tidak dipakai karena baris di tabel `_prisma_migrations` tidak ikut tersalin, sehingga Prisma mengira belum ada migrasi dan mencoba membuat ulang tabel yang sudah ada.
+
+## Challenge 20 nomor 6: Validasi input
+
+Validasi ada di `src/utils/parse.ts` (`checkEmail`, `checkPassword`, `checkName`, `throwIfInvalid`) dan dipakai di `POST /api/users` serta `PATCH /api/users/:id`.
+
+| Field | Aturan |
+| --- | --- |
+| `email` | Wajib, format `nama@domain.tld`, maksimal 254 karakter, disimpan lowercase dan di-trim |
+| `password` | Wajib, minimal 8 karakter, maksimal 72 byte (batas bcrypt), harus ada huruf dan angka |
+| `name` | Opsional, string atau `null`, maksimal 100 karakter |
+
+Semua field dicek sekaligus, sehingga user langsung melihat semua kesalahan dalam satu response:
+
+```json
+{
+  "status": false,
+  "message": "Validasi gagal, periksa kembali input kalian",
+  "errors": {
+    "email": "Format email tidak valid, contoh: nama@domain.com",
+    "password": "Password minimal 8 karakter"
+  }
+}
+```
+
+Email yang sudah terdaftar menghasilkan `409` (`Email sudah terdaftar` saat create, `Email sudah dipakai user lain` saat PATCH).
 
 ## Mencoba API
 

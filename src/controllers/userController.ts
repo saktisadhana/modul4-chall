@@ -2,20 +2,25 @@ import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import prisma from "../config/prisma";
 import { HttpError } from "../utils/http-error";
-import { nullableText, parseBody, parseId, parsePagination, parsePublished, requiredText } from "../utils/parse";
+import {
+  checkEmail, checkName, checkPassword, parseBody, parseId, parsePagination, parsePublished, throwIfInvalid,
+} from "../utils/parse";
 import { sendSuccess } from "../utils/response";
 import { authorSelect, userSummary } from "../utils/select";
 
 export const createUser = async (req: Request, res: Response) => {
   const body = parseBody(req.body);
-  const email = requiredText(body.email, "Email");
-  requiredText(body.password, "Password");
+  throwIfInvalid({
+    email: checkEmail(body.email),
+    password: checkPassword(body.password),
+    name: checkName(body.name),
+  });
+
+  // Sudah lolos validasi, jadi aman dianggap string. Email disimpan lowercase.
+  const email = (body.email as string).trim().toLowerCase();
   const password = body.password as string;
-  // bcrypt hanya memproses 72 byte; tolak agar password tidak terpotong diam-diam.
-  if (Buffer.byteLength(password, "utf8") > 72) {
-    throw new HttpError(400, "Password maksimal 72 byte UTF-8");
-  }
-  const name = body.name === undefined ? undefined : nullableText(body.name, "Name");
+  const name = typeof body.name === "string" ? body.name.trim() : (body.name as null | undefined);
+
   const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existingUser) throw new HttpError(409, "Email sudah terdaftar");
 
@@ -51,11 +56,22 @@ export const getUserById = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   const id = parseId(req.params.id);
   const body = parseBody(req.body);
-  const email = body.email === undefined ? undefined : requiredText(body.email, "Email");
-  const name = body.name === undefined ? undefined : nullableText(body.name, "Name");
-  if (email === undefined && name === undefined) {
+  if (body.email === undefined && body.name === undefined) {
     throw new HttpError(400, "Isi email dan/atau name untuk diubah");
   }
+  throwIfInvalid({
+    email: body.email === undefined ? null : checkEmail(body.email),
+    name: checkName(body.name),
+  });
+
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : undefined;
+  const name = typeof body.name === "string" ? body.name.trim() : (body.name as null | undefined);
+
+  if (email !== undefined) {
+    const owner = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (owner && owner.id !== id) throw new HttpError(409, "Email sudah dipakai user lain");
+  }
+
   const user = await prisma.user.update({
     where: { id },
     data: { ...(email !== undefined && { email }), ...(name !== undefined && { name }) },
